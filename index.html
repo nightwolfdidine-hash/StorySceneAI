@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1020"><link rel="manifest" href="manifest.webmanifest">
+<title>StorySceneAI Free</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080d1b;color:#f5f7ff;font-family:system-ui,Tahoma,Arial}.wrap{max-width:950px;margin:auto;padding:16px}
+h1{margin:5px 0;color:#fff}h1 span{color:#8b70ff}.sub{color:#aeb9d0;line-height:1.7}.card{background:#121a2c;border:1px solid #293550;border-radius:18px;padding:16px;margin:14px 0}
+label{display:block;font-weight:800;margin:10px 0 7px}textarea,input,select{width:100%;padding:12px;border-radius:12px;border:1px solid #33415f;background:#0b1221;color:#fff;font:inherit}textarea{min-height:240px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+button{padding:12px 16px;border:0;border-radius:12px;background:#795cff;color:#fff;font-weight:900;font-size:15px}.secondary{background:#27344f}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.hint{font-size:13px;color:#aeb9d0;line-height:1.6}
+.scene,.char{background:#0b1323;border:1px solid #293550;border-radius:14px;padding:12px;margin:10px 0}.prompt{white-space:pre-wrap;line-height:1.75;background:#121d31;padding:11px;border-radius:10px;margin-top:8px}.badge{background:#26334e;padding:5px 9px;border-radius:99px;font-size:12px}.hidden{display:none}
+@media(max-width:650px){.grid,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body><div class="wrap">
+<h1>Story<span>SceneAI</span> Free</h1>
+<div class="sub">نسخة مجانية: تعمل محلياً بدون OpenAI. ويمكن اختيار Gemini المجاني اختيارياً للحصول على تحليل ذكاء اصطناعي أقوى.</div>
+
+<div class="card">
+<label>القصة</label><textarea id="story" placeholder="ألصق قصتك الطويلة هنا..."></textarea>
+<div class="grid3">
+<div><label>عدد المشاهد</label><select id="count"><option value="auto">تلقائي</option><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option></select></div>
+<div><label>الستايل</label><select id="style"><option>Cinematic realistic</option><option>3D animated</option><option>Anime</option><option>Dark fantasy</option><option>Watercolor</option><option>Comic book</option><option>Photorealistic cinematic</option></select></div>
+<div><label>نسبة الصورة</label><select id="ratio"><option>16:9</option><option>9:16</option><option>1:1</option></select></div>
+</div>
+
+<label>وضع التشغيل</label>
+<select id="mode"><option value="local">مجاني محلي — بدون مفتاح</option><option value="gemini">Gemini API — طبقة مجانية حسب حدود Google</option></select>
+<div id="geminiBox" class="hidden">
+<label>Gemini API Key</label><input id="gkey" type="password" placeholder="مفتاح Gemini">
+<div class="hint">المفتاح اختياري فقط إذا اخترت Gemini. لا تضعه في GitHub.</div>
+</div>
+<div class="row"><button id="go">🎬 توليد الشخصيات والمشاهد</button><button class="secondary" id="demo">✨ قصة تجريبية</button><button class="secondary" id="clear">مسح</button></div>
+<div id="status" class="hint"></div>
+</div>
+
+<div id="out" class="hidden">
+<div class="card"><h2>👤 الشخصيات <span id="cc" class="badge"></span></h2><div id="chars"></div></div>
+<div class="card"><h2>🎞️ المشاهد <span id="sc" class="badge"></span></h2><div id="scenes"></div>
+<div class="row"><button id="copy">نسخ الكل</button><button class="secondary" id="txt">تحميل TXT</button></div></div>
+</div>
+</div>
+
+<script>
+const $=x=>document.getElementById(x);let result=null;
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+$('mode').onchange=()=> $('geminiBox').classList.toggle('hidden',$('mode').value!=='gemini');
+function paragraphs(s){return s.replace(/\r/g,'').split(/\n+/).map(x=>x.trim()).filter(Boolean)}
+function names(s){
+ let a=[],m,r=/(?:اسمه|اسمها|يدعى|تدعى|يُدعى|تُدعى)\s+([ء-يA-Za-z][ء-يA-Za-z0-9_-]{1,20})/g;
+ while(m=r.exec(s))if(!a.includes(m[1]))a.push(m[1]);
+ r=/\b([A-Z][a-z]{2,18})\b/g;while(m=r.exec(s))if(!a.includes(m[1]))a.push(m[1]);
+ return a.slice(0,12);
+}
+function local(){
+ let s=$('story').value.trim();if(!s)throw Error('أدخل القصة أولاً');
+ let p=paragraphs(s), n=$('count').value==='auto'?Math.max(5,Math.min(30,Math.round(s.length/650))):+$('count').value;
+ let ns=names(s);if(!ns.length)ns=['البطل'];
+ let style=$('style').value,ratio=$('ratio').value;
+ let chars=ns.map((x,i)=>({name:x,role:i?'شخصية مساندة':'الشخصية الرئيسية',prompt:`${x}, consistent character reference, ${style}, full body, clear face, distinctive clothing, stable age and features, detailed character sheet`}));
+ let scenes=[];for(let i=0;i<n;i++){let d=p[Math.floor(i*p.length/n)]||p[i%p.length]||s.slice(0,500);let who=chars.map(c=>c.name).join(', ');scenes.push({number:i+1,title:'مشهد '+(i+1),prompt:`${who}. ${d}. ${style}, cinematic composition, consistent character appearance and clothing, expressive emotions, detailed environment, dramatic lighting, depth of field, suitable camera framing, high detail, image aspect ratio ${ratio}.`})}
+ return {characters:chars,scenes};
+}
+async function gemini(){
+ let key=$('gkey').value.trim();if(!key)throw Error('أدخل Gemini API Key أو اختر الوضع المجاني المحلي.');
+ let s=$('story').value.trim();if(!s)throw Error('أدخل القصة أولاً');
+ let count=$('count').value==='auto'?'تلقائياً':$('count').value,style=$('style').value,ratio=$('ratio').value;
+ let prompt=`حلل القصة التالية وأعد JSON فقط بدون markdown. أنشئ ${count} مشاهد. استخرج الشخصيات. لكل شخصية: name, role, prompt. لكل مشهد: number,title,prompt. يجب أن يذكر prompt الخاص بالمشهد أسماء الشخصيات الموجودة فيه صراحة، ويكرر حرفياً الستايل "${style}" ونسبة الصورة "${ratio}". حافظ على ثبات العمر والملابس والملامح. اكتب بالعربية. القصة:\n${s}`;
+ let url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key='+encodeURIComponent(key);
+ let r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json'}})});
+ if(!r.ok)throw Error('Gemini HTTP '+r.status);
+ let j=await r.json(), t=j.candidates?.[0]?.content?.parts?.map(x=>x.text||'').join('')||'';
+ return JSON.parse(t.replace(/^```json/i,'').replace(/```$/,'').trim());
+}
+function render(d){
+ result=d;$('out').classList.remove('hidden');$('cc').textContent=(d.characters||[]).length+' شخصيات';$('sc').textContent=(d.scenes||[]).length+' مشاهد';
+ $('chars').innerHTML=(d.characters||[]).map(c=>`<div class="char"><b>${esc(c.name)}</b> — ${esc(c.role)}<div class="prompt">${esc(c.prompt)}</div></div>`).join('');
+ $('scenes').innerHTML=(d.scenes||[]).map(s=>`<div class="scene"><b>#${esc(s.number)} — ${esc(s.title)}</b><div class="prompt">${esc(s.prompt)}</div><div class="row"><button class="secondary" onclick="one(${+s.number})">نسخ البرومبت</button></div></div>`).join('');
+ $('out').scrollIntoView({behavior:'smooth'});
+}
+window.one=async n=>{let s=result.scenes.find(x=>+x.number===n);await navigator.clipboard.writeText(s.prompt);$('status').textContent='تم النسخ.'};
+$('go').onclick=async()=>{try{$('status').textContent='جاري التوليد...';$('go').disabled=true;render($('mode').value==='gemini'?await gemini():local());$('status').textContent='تم بنجاح.'}catch(e){$('status').textContent='خطأ: '+e.message}finally{$('go').disabled=false}};
+$('demo').onclick=()=>{$('story').value='كان آدم يعيش مع أخته ليان في قرية صغيرة قرب غابة قديمة. في ليلة عاصفة اختفت ليان، فدخل آدم الغابة حاملاً مصباحاً. وجد كوخاً قديماً ورسالة غامضة تقوده إلى بحيرة بعيدة، وهناك ظهرت ليان وسط الضباب وكشفت له سراً عن القرية.';$('count').value='5'};
+$('clear').onclick=()=>{location.reload()};
+$('copy').onclick=async()=>{if(!result)return;await navigator.clipboard.writeText(result.scenes.map(s=>`[${s.number}] ${s.title}\n${s.prompt}`).join('\n\n'));$('status').textContent='تم نسخ كل البرومبتات.'};
+$('txt').onclick=()=>{if(!result)return;let t='StorySceneAI Free\\n\\n';result.scenes.forEach(s=>t+=`\\n### ${s.number} ${s.title}\\n${s.prompt}\\n`);let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download='StorySceneAI-prompts.txt';a.click()};
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+</script></body></html>
